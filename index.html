@@ -103,6 +103,18 @@ label.lbl{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);t
 
 /* ── io ── */
 .io-hint{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);line-height:1.6}
+
+/* ── binaural ── */
+.bb-presets{display:flex;gap:4px;flex-wrap:wrap}
+.bb-preset{font-family:'Space Mono',monospace;font-size:10px;padding:5px 10px;border-radius:6px;border:1px solid var(--s2);background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}
+.bb-preset.active{border-color:var(--amber);color:var(--amber);background:var(--amber-glow)}
+.bb-indicator{display:flex;align-items:center;gap:6px}
+.bb-dot{width:7px;height:7px;border-radius:50%;background:var(--s2);flex-shrink:0;transition:background .3s}
+.bb-dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.bb-label{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
+.vol-row{display:flex;align-items:center;gap:10px}
+.vol-row label{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);white-space:nowrap}
+input[type=range]{flex:1;accent-color:var(--amber);height:4px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -171,6 +183,60 @@ label.lbl{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);t
   </div>
 </div>
 
+<!-- Playback settings -->
+<div class="card">
+  <div class="card-hdr"><span class="card-icon">🎧</span><span class="card-title">Playback</span></div>
+  <div class="card-body">
+
+    <!-- Loop -->
+    <div class="toggle-row">
+      <span class="toggle-label">Loop playback</span>
+      <label class="toggle"><input type="checkbox" id="loop-toggle"><div class="toggle-track"></div></label>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Binaural beats -->
+    <div class="toggle-row">
+      <div class="bb-indicator">
+        <div class="bb-dot" id="bb-dot"></div>
+        <span class="bb-label">Binaural beats overlay</span>
+      </div>
+      <label class="toggle"><input type="checkbox" id="bb-toggle"><div class="toggle-track"></div></label>
+    </div>
+
+    <div id="bb-controls" style="display:none;flex-direction:column;gap:10px">
+      <div>
+        <label class="lbl">Preset</label>
+        <div class="bb-presets" id="bb-presets">
+          <button class="bb-preset" data-freq="1.5" data-base="120">δ Delta 1.5Hz</button>
+          <button class="bb-preset" data-freq="4"   data-base="150">θ Theta 4Hz</button>
+          <button class="bb-preset" data-freq="8"   data-base="180">α Alpha 8Hz</button>
+          <button class="bb-preset" data-freq="14"  data-base="200">β Beta 14Hz</button>
+          <button class="bb-preset" data-freq="40"  data-base="220">γ Gamma 40Hz</button>
+        </div>
+      </div>
+      <div class="vol-row">
+        <label>Beat Hz</label>
+        <input type="range" id="bb-freq" min="0.5" max="40" step="0.5" value="4">
+        <span id="bb-freq-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--amber);min-width:32px">4Hz</span>
+      </div>
+      <div class="vol-row">
+        <label>Base Hz</label>
+        <input type="range" id="bb-base" min="60" max="300" step="5" value="150">
+        <span id="bb-base-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);min-width:36px">150Hz</span>
+      </div>
+      <div class="vol-row">
+        <label>Volume</label>
+        <input type="range" id="bb-vol" min="0" max="100" value="18">
+        <span id="bb-vol-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);min-width:30px">18%</span>
+      </div>
+      <p class="io-hint">Use headphones — binaural beats require stereo separation to work. Left ear hears the base frequency, right ear hears base + beat Hz.</p>
+    </div>
+
+  </div>
+</div>
+
 <!-- Clips -->
 <div class="card">
   <div class="card-hdr">
@@ -221,6 +287,15 @@ let currentSource=null;
 let analyserNode=null;
 let waveRaf=null;
 let playingClipId=null;
+let loopEnabled=false;
+let loopClipId=null;
+
+// Binaural state
+let bbEnabled=false;
+let bbFreq=4;
+let bbBase=150;
+let bbVol=0.18;
+let bbOscL=null,bbOscR=null,bbGainL=null,bbGainR=null,bbMerger=null;
 
 try{apiKey=localStorage.getItem('xi_studio_key')||''}catch(e){}
 try{voiceSlots=JSON.parse(localStorage.getItem('xi_studio_slots')||'[]')}catch(e){voiceSlots=[]}
@@ -240,6 +315,16 @@ function unlockAudio(){
   if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
 }
 
+// Keep AudioContext alive when tab loses focus
+document.addEventListener('visibilitychange',()=>{
+  if(!audioCtx)return;
+  if(document.hidden){
+    // Don't suspend — let audio continue playing in background
+  } else {
+    if(audioCtx.state==='suspended')audioCtx.resume();
+  }
+});
+
 function stopCurrent(){
   if(currentSource){try{currentSource.stop()}catch(e){}currentSource=null}
   stopWave();
@@ -250,30 +335,53 @@ function stopCurrent(){
     if(pb)pb.textContent='▶';
     playingClipId=null;
   }
+  loopClipId=null;
+  stopBinaural();
 }
+
+// Decoded buffer cache so loop replays instantly
+const bufCache={};
 
 function playBlob(blob,clipId){
   unlockAudio();
   if(!audioCtx)return;
+  if(playingClipId===clipId){stopCurrent();return;}
   stopCurrent();
-  blob.arrayBuffer().then(ab=>audioCtx.decodeAudioData(ab,buf=>{
+
+  const doPlay=buf=>{
+    bufCache[clipId]=buf;
     const src=audioCtx.createBufferSource();
     const analyser=audioCtx.createAnalyser();
     analyser.fftSize=64;
     src.buffer=buf;
+    src.loop=loopEnabled;
     src.connect(analyser);
     analyser.connect(audioCtx.destination);
-    src.start();
+    src.start(0);
     currentSource=src;
     analyserNode=analyser;
     playingClipId=clipId;
+    loopClipId=loopEnabled?clipId:null;
     const row=document.querySelector(`.clip-row[data-id="${clipId}"]`);
     if(row)row.classList.add('playing');
     const pb=document.querySelector(`.clip-row[data-id="${clipId}"] [data-play]`);
     if(pb)pb.textContent='■';
     startWave();
-    src.onended=()=>{if(playingClipId===clipId)stopCurrent()};
-  },()=>setStatus('gen-status','Could not decode audio','err'))).catch(()=>{});
+    if(bbEnabled)startBinaural();
+    // Only wire onended when not looping — looping sources never fire onended
+    if(!loopEnabled){
+      src.onended=()=>{
+        // Guard: only clean up if this source is still the active one
+        if(currentSource===src)stopCurrent();
+      };
+    }
+  };
+
+  if(bufCache[clipId]){doPlay(bufCache[clipId]);return;}
+  blob.arrayBuffer()
+    .then(ab=>new Promise((res,rej)=>audioCtx.decodeAudioData(ab,res,rej)))
+    .then(doPlay)
+    .catch(()=>setStatus('gen-status','Could not decode audio','err'));
 }
 
 // ── Waveform ──────────────────────────────────────────────────────────────────
@@ -305,7 +413,118 @@ function stopWave(){
   bars.forEach(b=>b.style.height='3px');
 }
 
-// ── API Key ───────────────────────────────────────────────────────────────────
+// ── Binaural beats ────────────────────────────────────────────────────────────
+// Uses StereoPannerNode: left osc panned hard left, right osc panned hard right.
+// Brain perceives the difference between the two frequencies as a beat.
+function startBinaural(){
+  stopBinaural();
+  unlockAudio();
+  if(!audioCtx)return;
+
+  const masterGain=audioCtx.createGain();
+  masterGain.gain.value=bbVol;
+  masterGain.connect(audioCtx.destination);
+
+  // Left ear: base frequency, panned hard left
+  bbOscL=audioCtx.createOscillator();
+  bbOscL.type='sine';
+  bbOscL.frequency.value=bbBase;
+  const panL=audioCtx.createStereoPanner();
+  panL.pan.value=-1;
+  bbOscL.connect(panL);
+  panL.connect(masterGain);
+
+  // Right ear: base + beat frequency, panned hard right
+  bbOscR=audioCtx.createOscillator();
+  bbOscR.type='sine';
+  bbOscR.frequency.value=bbBase+bbFreq;
+  const panR=audioCtx.createStereoPanner();
+  panR.pan.value=1;
+  bbOscR.connect(panR);
+  panR.connect(masterGain);
+
+  // Store refs for freq updates and gain
+  bbGainL=masterGain; // shared gain
+  bbMerger=masterGain; // reuse field to track master gain node
+
+  bbOscL.start();
+  bbOscR.start();
+  document.getElementById('bb-dot').classList.add('on');
+}
+
+function stopBinaural(){
+  if(bbOscL){try{bbOscL.stop()}catch(e){}bbOscL=null}
+  if(bbOscR){try{bbOscR.stop()}catch(e){}bbOscR=null}
+  bbMerger=null;bbGainL=null;
+  document.getElementById('bb-dot').classList.remove('on');
+}
+
+function updateBinauralFreqs(){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  if(bbOscL)bbOscL.frequency.setTargetAtTime(bbBase,t,0.05);
+  if(bbOscR)bbOscR.frequency.setTargetAtTime(bbBase+bbFreq,t,0.05);
+}
+
+function updateBinauralVol(){
+  if(bbMerger)bbMerger.gain.setTargetAtTime(bbVol,audioCtx.currentTime,0.05);
+}
+
+// ── Loop & Binaural UI ────────────────────────────────────────────────────────
+document.getElementById('loop-toggle').addEventListener('change',e=>{
+  loopEnabled=e.target.checked;
+  if(currentSource){
+    currentSource.loop=loopEnabled;
+    if(!loopEnabled){
+      // Wire cleanup now that we've turned off loop
+      const src=currentSource;
+      const cid=playingClipId;
+      src.onended=()=>{if(currentSource===src)stopCurrent()};
+    } else {
+      currentSource.onended=null;
+    }
+  }
+});
+
+document.getElementById('bb-toggle').addEventListener('change',e=>{
+  bbEnabled=e.target.checked;
+  document.getElementById('bb-controls').style.display=bbEnabled?'flex':'none';
+  if(bbEnabled&&playingClipId)startBinaural();
+  else stopBinaural();
+});
+
+// Presets
+document.querySelectorAll('.bb-preset').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.bb-preset').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    bbFreq=parseFloat(btn.dataset.freq);
+    bbBase=parseFloat(btn.dataset.base);
+    document.getElementById('bb-freq').value=bbFreq;
+    document.getElementById('bb-base').value=bbBase;
+    document.getElementById('bb-freq-val').textContent=bbFreq+'Hz';
+    document.getElementById('bb-base-val').textContent=bbBase+'Hz';
+    updateBinauralFreqs();
+  });
+});
+
+// Sliders
+document.getElementById('bb-freq').addEventListener('input',e=>{
+  bbFreq=parseFloat(e.target.value);
+  document.getElementById('bb-freq-val').textContent=bbFreq+'Hz';
+  document.querySelectorAll('.bb-preset').forEach(b=>b.classList.remove('active'));
+  updateBinauralFreqs();
+});
+document.getElementById('bb-base').addEventListener('input',e=>{
+  bbBase=parseFloat(e.target.value);
+  document.getElementById('bb-base-val').textContent=bbBase+'Hz';
+  updateBinauralFreqs();
+});
+document.getElementById('bb-vol').addEventListener('input',e=>{
+  bbVol=parseInt(e.target.value)/100;
+  document.getElementById('bb-vol-val').textContent=e.target.value+'%';
+  updateBinauralVol();
+});
 const keyInp=document.getElementById('xi-key');
 if(apiKey)keyInp.value=apiKey;
 
@@ -463,8 +682,7 @@ function renderClips(){
     row.querySelector('[data-play]').addEventListener('click',()=>{
       if(playingClipId===clip.id){stopCurrent();return}
       idbGet(clip.id).then(blob=>{if(blob)playBlob(blob,clip.id)}).catch(()=>{});
-    });
-    row.querySelector('[data-dl]').addEventListener('click',()=>downloadClip(clip));
+    });    row.querySelector('[data-dl]').addEventListener('click',()=>downloadClip(clip));
     row.querySelector('[data-del]').addEventListener('click',()=>{
       idbDel(clip.id);clips=clips.filter(c=>c.id!==clip.id);saveState();renderClips();
       if(playingClipId===clip.id)stopCurrent();
@@ -477,11 +695,89 @@ async function downloadClip(clip){
   const blob=await idbGet(clip.id);
   if(!blob){setStatus('gen-status','Clip data missing','err');return}
   const safeName=clip.name.replace(/[^a-z0-9_\-\s]/gi,'').trim().replace(/\s+/g,'_').slice(0,40)||'clip';
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([await blob.arrayBuffer()],{type:'audio/mpeg'}));
-  a.download=safeName+'.mp3';
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+
+  // If binaural is not enabled, just download the original blob directly
+  if(!bbEnabled){
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([await blob.arrayBuffer()],{type:'audio/mpeg'}));
+    a.download=safeName+'.mp3';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    return;
+  }
+
+  // Render clip + binaural beats into a WAV file using OfflineAudioContext
+  setStatus('gen-status','Rendering with binaural…','busy');
+  try{
+    unlockAudio();
+    const ab=await blob.arrayBuffer();
+    // Decode using live context
+    const buf=await new Promise((res,rej)=>audioCtx.decodeAudioData(ab.slice(0),res,rej));
+    const sampleRate=buf.sampleRate;
+    const duration=buf.duration;
+    const numFrames=Math.ceil(duration*sampleRate);
+
+    // Offline context: 2 channels (stereo), full duration
+    const offCtx=new OfflineAudioContext(2,numFrames,sampleRate);
+
+    // Clip source
+    const clipSrc=offCtx.createBufferSource();
+    clipSrc.buffer=buf;
+    clipSrc.connect(offCtx.destination);
+    clipSrc.start(0);
+
+    // Binaural oscillators into offline context
+    const masterGain=offCtx.createGain();
+    masterGain.gain.value=bbVol;
+    masterGain.connect(offCtx.destination);
+
+    const oscL=offCtx.createOscillator();
+    oscL.type='sine';oscL.frequency.value=bbBase;
+    const panL=offCtx.createStereoPanner();panL.pan.value=-1;
+    oscL.connect(panL);panL.connect(masterGain);oscL.start(0);oscL.stop(duration);
+
+    const oscR=offCtx.createOscillator();
+    oscR.type='sine';oscR.frequency.value=bbBase+bbFreq;
+    const panR=offCtx.createStereoPanner();panR.pan.value=1;
+    oscR.connect(panR);panR.connect(masterGain);oscR.start(0);oscR.stop(duration);
+
+    const rendered=await offCtx.startRendering();
+
+    // Encode to WAV
+    const wavBlob=audioBufferToWav(rendered);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(wavBlob);
+    a.download=safeName+'_binaural.wav';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    setStatus('gen-status','Downloaded with binaural mix ✓','ok');
+  }catch(e){setStatus('gen-status','Render failed: '+(e.message||e),'err')}
+}
+
+function audioBufferToWav(buf){
+  const numCh=buf.numberOfChannels,sr=buf.sampleRate,len=buf.length;
+  const byteLen=44+len*numCh*2;
+  const ab=new ArrayBuffer(byteLen);
+  const view=new DataView(ab);
+  const w=(o,v)=>view.setUint32(o,v,true);
+  const ws=(o,v)=>view.setUint16(o,v,true);
+  // RIFF header
+  [82,73,70,70].forEach((c,i)=>view.setUint8(i,c));  // 'RIFF'
+  w(4,byteLen-8);
+  [87,65,86,69].forEach((c,i)=>view.setUint8(8+i,c)); // 'WAVE'
+  [102,109,116,32].forEach((c,i)=>view.setUint8(12+i,c)); // 'fmt '
+  w(16,16);ws(20,1);ws(22,numCh);w(24,sr);w(28,sr*numCh*2);ws(32,numCh*2);ws(34,16);
+  [100,97,116,97].forEach((c,i)=>view.setUint8(36+i,c)); // 'data'
+  w(40,len*numCh*2);
+  let offset=44;
+  for(let i=0;i<len;i++){
+    for(let ch=0;ch<numCh;ch++){
+      const s=Math.max(-1,Math.min(1,buf.getChannelData(ch)[i]));
+      view.setInt16(offset,s<0?s*32768:s*32767,true);
+      offset+=2;
+    }
+  }
+  return new Blob([ab],{type:'audio/wav'});
 }
 
 document.getElementById('clear-all-btn').addEventListener('click',async()=>{
