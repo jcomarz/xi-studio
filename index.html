@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>XI Studio</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--s1:#1a1d27;--s2:#22263a;--s3:#2a2f45;
+  --amber:#f5a623;--amber-dim:#a06a10;--amber-glow:rgba(245,166,35,0.15);
+  --green:#3ecf6e;--red:#e05252;
+  --text:#e8eaf0;--muted:#6b7280;--muted2:#4b5263;
+}
+html,body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
+body{display:flex;flex-direction:column;align-items:center;padding:16px 12px 60px;overflow-x:hidden}
+body>*{width:100%;max-width:500px}
+
+/* ── header ── */
+.hdr{display:flex;align-items:baseline;gap:10px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--s2)}
+.hdr-title{font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--amber);letter-spacing:.05em}
+.hdr-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+
+/* ── cards ── */
+.card{background:var(--s1);border:1px solid var(--s2);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.card-hdr{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--s2)}
+.card-icon{font-size:14px}
+.card-title{font-family:'Space Mono',monospace;font-size:11px;color:var(--text);text-transform:uppercase;letter-spacing:.08em}
+.card-body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+
+/* ── inputs ── */
+.inp{width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--s2);border-radius:8px;color:var(--text);font-family:'Space Mono',monospace;font-size:12px;outline:none;transition:border-color .15s}
+.inp:focus{border-color:var(--amber)}
+.inp::placeholder{color:var(--muted2)}
+.inp-row{display:flex;gap:8px}
+.inp-row .inp{flex:1;min-width:0}
+label.lbl{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;display:block;margin-bottom:4px}
+
+/* ── buttons ── */
+.btn{font-family:'Space Mono',monospace;font-size:11px;padding:8px 16px;border-radius:8px;border:1px solid var(--amber-dim);background:transparent;color:var(--amber);cursor:pointer;transition:all .15s;white-space:nowrap;letter-spacing:.04em}
+.btn:hover{background:var(--amber-glow)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:var(--amber);color:#000;border-color:var(--amber);font-weight:700}
+.btn.primary:hover:not(:disabled){background:#f0b84a}
+.btn.sm{padding:5px 10px;font-size:10px}
+.btn.ghost{border-color:var(--s2);color:var(--muted)}
+.btn.ghost:hover{border-color:var(--amber);color:var(--amber)}
+.btn.danger{border-color:#e0525240;color:var(--red)}
+.btn.danger:hover{background:rgba(224,82,82,.12)}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── toggle ── */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.toggle-label{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)}
+.toggle{position:relative;width:40px;height:23px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{position:absolute;inset:0;border-radius:12px;background:var(--s2);border:1px solid var(--s3);cursor:pointer;transition:all .2s}
+.toggle-track::after{content:'';position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:#fff;transition:transform .2s}
+.toggle input:checked+.toggle-track{background:var(--amber);border-color:var(--amber)}
+.toggle input:checked+.toggle-track::after{transform:translateX(17px)}
+
+/* ── mode selector ── */
+.mode-tabs{display:flex;gap:4px;background:var(--bg);border-radius:8px;padding:3px}
+.mode-tab{flex:1;padding:6px;border:none;border-radius:6px;background:transparent;color:var(--muted);font-family:'Space Mono',monospace;font-size:10px;cursor:pointer;transition:all .15s;text-align:center}
+.mode-tab.active{background:var(--s2);color:var(--amber)}
+
+/* ── voice slots ── */
+.voice-slots{display:flex;flex-direction:column;gap:6px}
+.voice-slot{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--s2);border-radius:8px;cursor:pointer;transition:border-color .15s}
+.voice-slot.selected{border-color:var(--amber);background:var(--amber-glow)}
+.voice-slot-dot{width:8px;height:8px;border-radius:50%;background:var(--s2);border:1px solid var(--s3);flex-shrink:0;transition:all .15s}
+.voice-slot.selected .voice-slot-dot{background:var(--amber);border-color:var(--amber)}
+.voice-slot-info{flex:1;min-width:0}
+.voice-slot-name{font-family:'Space Mono',monospace;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.voice-slot-id{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.voice-slot-btns{display:flex;gap:4px;flex-shrink:0}
+
+/* ── clip list ── */
+.clip-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto}
+.clip-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--s2);border-radius:8px}
+.clip-row.playing{border-color:var(--green)}
+.clip-name{flex:1;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clip-row-btns{display:flex;gap:4px;flex-shrink:0}
+.clip-mode-badge{font-family:'Space Mono',monospace;font-size:8px;padding:2px 5px;border-radius:4px;background:var(--s2);color:var(--muted);flex-shrink:0}
+.clip-mode-badge.tts{color:#7eb8f7}
+.clip-mode-badge.sfx{color:#c07ef7}
+.empty-state{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);text-align:center;padding:20px 0}
+
+/* ── waveform visualizer ── */
+.waveform-wrap{height:40px;display:flex;align-items:center;justify-content:center;gap:2px;background:var(--bg);border-radius:8px;padding:6px 10px;overflow:hidden}
+.waveform-bar{width:3px;border-radius:2px;background:var(--amber);opacity:.25;transition:height .05s,opacity .05s;min-height:3px}
+.waveform-wrap.active .waveform-bar{opacity:.85}
+
+/* ── status ── */
+.status{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:4px 0;min-height:20px}
+.status.ok{color:var(--green)}
+.status.err{color:var(--red)}
+.status.busy{color:var(--amber)}
+
+/* ── divider ── */
+.divider{height:1px;background:var(--s2);margin:2px 0}
+
+/* ── io ── */
+.io-hint{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <span class="hdr-title">XI Studio</span>
+  <span class="hdr-sub">ElevenLabs Generator</span>
+</div>
+
+<!-- API Key -->
+<div class="card">
+  <div class="card-hdr"><span class="card-icon">🔑</span><span class="card-title">API Key</span></div>
+  <div class="card-body">
+    <div>
+      <label class="lbl">ElevenLabs API Key</label>
+      <div class="inp-row">
+        <input class="inp" type="password" id="xi-key" placeholder="sk-…" autocomplete="off">
+        <button class="btn" id="key-save-btn">Save</button>
+      </div>
+    </div>
+    <div id="key-status" class="status"></div>
+  </div>
+</div>
+
+<!-- Voice Slots -->
+<div class="card">
+  <div class="card-hdr"><span class="card-icon">🎙️</span><span class="card-title">Voice Slots</span>
+    <button class="btn sm ghost" id="add-slot-btn" style="margin-left:auto">＋ Add slot</button>
+  </div>
+  <div class="card-body">
+    <div class="voice-slots" id="voice-slots"></div>
+    <div id="slot-edit" style="display:none;flex-direction:column;gap:8px">
+      <div class="divider"></div>
+      <label class="lbl">Editing slot: <span id="slot-edit-label" style="color:var(--amber)"></span></label>
+      <input class="inp" id="slot-name-inp" placeholder="Nickname (e.g. Rachel – Calm)">
+      <input class="inp" id="slot-id-inp" placeholder="Voice ID (e.g. 21m00Tcm4TlvDq8ikWAM)">
+      <div class="btn-row">
+        <button class="btn primary sm" id="slot-save-btn">Save slot</button>
+        <button class="btn ghost sm" id="slot-cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Generate -->
+<div class="card">
+  <div class="card-hdr"><span class="card-icon">⚡</span><span class="card-title">Generate</span></div>
+  <div class="card-body">
+    <div class="mode-tabs" id="mode-tabs">
+      <button class="mode-tab active" data-mode="tts">🗣 Speech (TTS)</button>
+      <button class="mode-tab" data-mode="sfx">💥 Sound Effect</button>
+    </div>
+    <div>
+      <label class="lbl" id="phrase-label">Text to speak</label>
+      <textarea class="inp" id="xi-phrase" rows="3" placeholder="Enter text to speak…" style="resize:vertical;line-height:1.5"></textarea>
+    </div>
+    <div id="tts-options">
+      <label class="lbl">Voice</label>
+      <div id="voice-select-display" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);padding:6px 0">No voice selected — add a slot above</div>
+    </div>
+    <div class="waveform-wrap" id="waveform"><div class="waveform-bar" style="height:8px"></div></div>
+    <div id="gen-status" class="status"></div>
+    <div class="btn-row">
+      <button class="btn primary" id="gen-btn" style="flex:1">⚡ Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- Clips -->
+<div class="card">
+  <div class="card-hdr">
+    <span class="card-icon">📼</span><span class="card-title">Generated Clips</span>
+    <span id="clip-count-badge" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--amber);background:var(--amber-glow);border-radius:8px;padding:2px 7px;margin-left:4px;display:none">0</span>
+    <button class="btn sm ghost danger" id="clear-all-btn" style="margin-left:auto">Clear all</button>
+  </div>
+  <div class="card-body">
+    <div class="clip-list" id="clip-list"></div>
+  </div>
+</div>
+
+<!-- Import / Export -->
+<div class="card">
+  <div class="card-hdr"><span class="card-icon">💾</span><span class="card-title">Save / Restore</span></div>
+  <div class="card-body">
+    <p class="io-hint">Export saves your API key, all voice slots, and every generated clip as a single JSON file. Import restores everything — including the audio data.</p>
+    <div class="btn-row">
+      <button class="btn" id="export-btn" style="flex:1">⬇ Export</button>
+      <button class="btn" id="import-btn" style="flex:1">⬆ Import</button>
+    </div>
+    <input type="file" id="import-input" accept=".json" style="display:none">
+    <div id="io-status" class="status"></div>
+  </div>
+</div>
+
+<script>
+// ── IDB ───────────────────────────────────────────────────────────────────────
+let _db=null;
+function idb(){return new Promise((res,rej)=>{if(_db)return res(_db);const r=indexedDB.open('xi_studio',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('clips'))r.result.createObjectStore('clips')};r.onsuccess=()=>{_db=r.result;res(_db)};r.onerror=()=>rej(r.error)})}
+function idbPut(k,v){return idb().then(db=>new Promise((res,rej)=>{const t=db.transaction('clips','readwrite');t.objectStore('clips').put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error)}))}
+function idbGet(k){return idb().then(db=>new Promise((res,rej)=>{const t=db.transaction('clips','readonly'),rq=t.objectStore('clips').get(k);rq.onsuccess=()=>res(rq.result||null);rq.onerror=()=>rej(rq.error)}))}
+function idbDel(k){return idb().then(db=>new Promise(res=>{const t=db.transaction('clips','readwrite');t.objectStore('clips').delete(k);t.oncomplete=()=>res()})).catch(()=>{})}
+function idbGetAll(){return idb().then(db=>new Promise((res,rej)=>{const t=db.transaction('clips','readonly'),r=t.objectStore('clips').getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)}))}
+function idbGetAllKeys(){return idb().then(db=>new Promise((res,rej)=>{const t=db.transaction('clips','readonly'),r=t.objectStore('clips').getAllKeys();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)}))}
+
+function uid(){return 'c'+Math.random().toString(36).slice(2,9)+Date.now().toString(36)}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let apiKey='';
+let voiceSlots=[]; // [{id, name, voiceId}]
+let selectedSlot=null; // slot id
+let clips=[]; // [{id, name, mode, voiceSlotId}]
+let genMode='tts';
+let editingSlot=null; // slot id or 'new'
+let audioCtx=null;
+let currentSource=null;
+let analyserNode=null;
+let waveRaf=null;
+let playingClipId=null;
+
+try{apiKey=localStorage.getItem('xi_studio_key')||''}catch(e){}
+try{voiceSlots=JSON.parse(localStorage.getItem('xi_studio_slots')||'[]')}catch(e){voiceSlots=[]}
+try{selectedSlot=localStorage.getItem('xi_studio_selected')||null}catch(e){}
+try{clips=JSON.parse(localStorage.getItem('xi_studio_clips')||'[]')}catch(e){clips=[]}
+
+function saveState(){
+  try{localStorage.setItem('xi_studio_key',apiKey)}catch(e){}
+  try{localStorage.setItem('xi_studio_slots',JSON.stringify(voiceSlots))}catch(e){}
+  try{localStorage.setItem('xi_studio_selected',selectedSlot||'')}catch(e){}
+  try{localStorage.setItem('xi_studio_clips',JSON.stringify(clips))}catch(e){}
+}
+
+// ── Audio ─────────────────────────────────────────────────────────────────────
+function unlockAudio(){
+  if(!audioCtx)try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+}
+
+function stopCurrent(){
+  if(currentSource){try{currentSource.stop()}catch(e){}currentSource=null}
+  stopWave();
+  if(playingClipId){
+    const row=document.querySelector(`.clip-row[data-id="${playingClipId}"]`);
+    if(row)row.classList.remove('playing');
+    const pb=document.querySelector(`.clip-row[data-id="${playingClipId}"] [data-play]`);
+    if(pb)pb.textContent='▶';
+    playingClipId=null;
+  }
+}
+
+function playBlob(blob,clipId){
+  unlockAudio();
+  if(!audioCtx)return;
+  stopCurrent();
+  blob.arrayBuffer().then(ab=>audioCtx.decodeAudioData(ab,buf=>{
+    const src=audioCtx.createBufferSource();
+    const analyser=audioCtx.createAnalyser();
+    analyser.fftSize=64;
+    src.buffer=buf;
+    src.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    src.start();
+    currentSource=src;
+    analyserNode=analyser;
+    playingClipId=clipId;
+    const row=document.querySelector(`.clip-row[data-id="${clipId}"]`);
+    if(row)row.classList.add('playing');
+    const pb=document.querySelector(`.clip-row[data-id="${clipId}"] [data-play]`);
+    if(pb)pb.textContent='■';
+    startWave();
+    src.onended=()=>{if(playingClipId===clipId)stopCurrent()};
+  },()=>setStatus('gen-status','Could not decode audio','err'))).catch(()=>{});
+}
+
+// ── Waveform ──────────────────────────────────────────────────────────────────
+const waveEl=document.getElementById('waveform');
+const BAR_COUNT=24;
+// Build bars
+waveEl.innerHTML='';
+for(let i=0;i<BAR_COUNT;i++){const b=document.createElement('div');b.className='waveform-bar';b.style.height='3px';waveEl.appendChild(b)}
+const bars=[...waveEl.querySelectorAll('.waveform-bar')];
+
+function startWave(){
+  waveEl.classList.add('active');
+  const data=new Uint8Array(analyserNode.frequencyBinCount);
+  (function draw(){
+    if(!analyserNode){stopWave();return}
+    analyserNode.getByteFrequencyData(data);
+    bars.forEach((b,i)=>{
+      const v=data[Math.floor(i*data.length/BAR_COUNT)]/255;
+      b.style.height=Math.max(3,Math.round(v*34))+'px';
+    });
+    waveRaf=requestAnimationFrame(draw);
+  })();
+}
+
+function stopWave(){
+  if(waveRaf)cancelAnimationFrame(waveRaf);
+  waveRaf=null;analyserNode=null;
+  waveEl.classList.remove('active');
+  bars.forEach(b=>b.style.height='3px');
+}
+
+// ── API Key ───────────────────────────────────────────────────────────────────
+const keyInp=document.getElementById('xi-key');
+if(apiKey)keyInp.value=apiKey;
+
+document.getElementById('key-save-btn').addEventListener('click',()=>{
+  apiKey=keyInp.value.trim();
+  saveState();
+  setStatus('key-status',apiKey?'Key saved ✓':'Key cleared','ok');
+  setTimeout(()=>setStatus('key-status','',''),2000);
+});
+
+// ── Voice Slots ───────────────────────────────────────────────────────────────
+function renderSlots(){
+  const el=document.getElementById('voice-slots');
+  if(!voiceSlots.length){
+    el.innerHTML='<div class="empty-state">No voice slots yet. Add one above.</div>';
+    document.getElementById('voice-select-display').textContent='No voice selected — add a slot above';
+    return;
+  }
+  el.innerHTML='';
+  voiceSlots.forEach(slot=>{
+    const div=document.createElement('div');
+    div.className='voice-slot'+(selectedSlot===slot.id?' selected':'');
+    div.dataset.id=slot.id;
+    div.innerHTML=`<div class="voice-slot-dot"></div>
+      <div class="voice-slot-info">
+        <div class="voice-slot-name">${esc(slot.name||'Unnamed')}</div>
+        <div class="voice-slot-id">${esc(slot.voiceId||'No ID set')}</div>
+      </div>
+      <div class="voice-slot-btns">
+        <button class="btn sm ghost" data-edit="${slot.id}">Edit</button>
+        <button class="btn sm ghost danger" data-del="${slot.id}">✕</button>
+      </div>`;
+    div.addEventListener('click',e=>{
+      if(e.target.dataset.edit||e.target.dataset.del)return;
+      selectedSlot=slot.id;saveState();renderSlots();updateVoiceDisplay();
+    });
+    div.querySelector('[data-edit]').addEventListener('click',e=>{e.stopPropagation();openSlotEdit(slot.id)});
+    div.querySelector('[data-del]').addEventListener('click',e=>{e.stopPropagation();delSlot(slot.id)});
+    el.appendChild(div);
+  });
+  updateVoiceDisplay();
+}
+
+function updateVoiceDisplay(){
+  const slot=voiceSlots.find(s=>s.id===selectedSlot);
+  document.getElementById('voice-select-display').textContent=slot
+    ?`${slot.name||'Unnamed'} — ${slot.voiceId||'No ID'}`
+    :'No voice selected';
+}
+
+function openSlotEdit(id){
+  editingSlot=id;
+  const slot=voiceSlots.find(s=>s.id===id)||{name:'',voiceId:''};
+  document.getElementById('slot-edit-label').textContent=id==='new'?'New slot':slot.name||'Unnamed';
+  document.getElementById('slot-name-inp').value=slot.name||'';
+  document.getElementById('slot-id-inp').value=slot.voiceId||'';
+  const ed=document.getElementById('slot-edit');ed.style.display='flex';
+  document.getElementById('slot-name-inp').focus();
+}
+
+function closeSlotEdit(){editingSlot=null;document.getElementById('slot-edit').style.display='none'}
+
+document.getElementById('add-slot-btn').addEventListener('click',()=>{
+  const newSlot={id:uid(),name:'',voiceId:''};
+  voiceSlots.push(newSlot);saveState();renderSlots();openSlotEdit(newSlot.id);
+});
+document.getElementById('slot-save-btn').addEventListener('click',()=>{
+  if(!editingSlot)return;
+  const slot=voiceSlots.find(s=>s.id===editingSlot);
+  if(slot){slot.name=document.getElementById('slot-name-inp').value.trim();slot.voiceId=document.getElementById('slot-id-inp').value.trim()}
+  saveState();renderSlots();closeSlotEdit();
+});
+document.getElementById('slot-cancel-btn').addEventListener('click',()=>{
+  // If newly added slot has no name/id, remove it
+  if(editingSlot){const slot=voiceSlots.find(s=>s.id===editingSlot);if(slot&&!slot.name&&!slot.voiceId){voiceSlots=voiceSlots.filter(s=>s.id!==editingSlot);saveState();renderSlots()}}
+  closeSlotEdit();
+});
+
+function delSlot(id){
+  voiceSlots=voiceSlots.filter(s=>s.id!==id);
+  if(selectedSlot===id)selectedSlot=null;
+  saveState();renderSlots();
+}
+
+// ── Mode tabs ─────────────────────────────────────────────────────────────────
+document.querySelectorAll('.mode-tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    genMode=tab.dataset.mode;
+    document.querySelectorAll('.mode-tab').forEach(t=>t.classList.toggle('active',t===tab));
+    document.getElementById('phrase-label').textContent=genMode==='tts'?'Text to speak':'Describe the sound';
+    document.getElementById('xi-phrase').placeholder=genMode==='tts'?'Enter text to speak…':'Describe the sound (e.g. wooden door creaking)…';
+    document.getElementById('tts-options').style.display=genMode==='tts'?'block':'none';
+  });
+});
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+document.getElementById('gen-btn').addEventListener('click',generate);
+
+async function generate(){
+  const key=keyInp.value.trim()||apiKey;
+  const phrase=document.getElementById('xi-phrase').value.trim();
+  if(!key){setStatus('gen-status','Enter your API key first','err');return}
+  if(!phrase){setStatus('gen-status','Enter text or a sound description','err');return}
+  if(genMode==='tts'){
+    const slot=voiceSlots.find(s=>s.id===selectedSlot);
+    if(!slot||!slot.voiceId){setStatus('gen-status','Select a voice slot with a Voice ID','err');return}
+  }
+  // Save key
+  apiKey=key;saveState();
+  const btn=document.getElementById('gen-btn');btn.disabled=true;btn.textContent='⏳ Generating…';
+  setStatus('gen-status','Calling ElevenLabs…','busy');
+  try{
+    let url,body;
+    const headers={'xi-api-key':key,'Content-Type':'application/json'};
+    if(genMode==='sfx'){
+      url='https://api.elevenlabs.io/v1/sound-generation';
+      body=JSON.stringify({text:phrase});
+    } else {
+      const slot=voiceSlots.find(s=>s.id===selectedSlot);
+      url='https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(slot.voiceId);
+      body=JSON.stringify({text:phrase,model_id:'eleven_multilingual_v2'});
+    }
+    const res=await fetch(url,{method:'POST',headers,body});
+    if(!res.ok){const t=await res.text();throw new Error(res.status+' '+(t||'').slice(0,200))}
+    const blob=await res.blob();
+    const id=uid();
+    const name=phrase.slice(0,48)+(genMode==='sfx'?' [sfx]':' [tts]');
+    await idbPut(id,blob);
+    clips.unshift({id,name,mode:genMode,voiceSlotId:selectedSlot||null,created:Date.now()});
+    saveState();renderClips();
+    setStatus('gen-status','✓ Generated & saved','ok');
+    // Auto-play
+    playBlob(blob,id);
+  }catch(err){setStatus('gen-status','Error: '+(err.message||'failed'),'err')}
+  finally{btn.disabled=false;btn.textContent='⚡ Generate'}
+}
+
+// ── Clips ─────────────────────────────────────────────────────────────────────
+function renderClips(){
+  const el=document.getElementById('clip-list');
+  const badge=document.getElementById('clip-count-badge');
+  badge.textContent=clips.length;badge.style.display=clips.length?'inline':'none';
+  if(!clips.length){el.innerHTML='<div class="empty-state">No clips yet. Generate something above.</div>';return}
+  el.innerHTML='';
+  clips.forEach(clip=>{
+    const row=document.createElement('div');
+    row.className='clip-row';row.dataset.id=clip.id;
+    row.innerHTML=`<span class="clip-mode-badge ${clip.mode}">${clip.mode}</span>
+      <span class="clip-name" title="${esc(clip.name)}">${esc(clip.name)}</span>
+      <div class="clip-row-btns">
+        <button class="btn sm ghost" data-play="${clip.id}" title="Play">▶</button>
+        <button class="btn sm ghost" data-dl="${clip.id}" title="Save as MP3">⬇</button>
+        <button class="btn sm ghost danger" data-del="${clip.id}" title="Delete">✕</button>
+      </div>`;
+    row.querySelector('[data-play]').addEventListener('click',()=>{
+      if(playingClipId===clip.id){stopCurrent();return}
+      idbGet(clip.id).then(blob=>{if(blob)playBlob(blob,clip.id)}).catch(()=>{});
+    });
+    row.querySelector('[data-dl]').addEventListener('click',()=>downloadClip(clip));
+    row.querySelector('[data-del]').addEventListener('click',()=>{
+      idbDel(clip.id);clips=clips.filter(c=>c.id!==clip.id);saveState();renderClips();
+      if(playingClipId===clip.id)stopCurrent();
+    });
+    el.appendChild(row);
+  });
+}
+
+async function downloadClip(clip){
+  const blob=await idbGet(clip.id);
+  if(!blob){setStatus('gen-status','Clip data missing','err');return}
+  const safeName=clip.name.replace(/[^a-z0-9_\-\s]/gi,'').trim().replace(/\s+/g,'_').slice(0,40)||'clip';
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([await blob.arrayBuffer()],{type:'audio/mpeg'}));
+  a.download=safeName+'.mp3';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+
+document.getElementById('clear-all-btn').addEventListener('click',async()=>{
+  if(!confirm('Delete all clips?'))return;
+  stopCurrent();
+  for(const c of clips)await idbDel(c.id).catch(()=>{});
+  clips=[];saveState();renderClips();
+});
+
+// ── Export / Import ───────────────────────────────────────────────────────────
+document.getElementById('export-btn').addEventListener('click',async()=>{
+  setStatus('io-status','Preparing export…','busy');
+  try{
+    const keys=await idbGetAllKeys();
+    const audioData={};
+    for(const k of keys){
+      const blob=await idbGet(k);if(!blob)continue;
+      const ab=await blob.arrayBuffer();
+      const b64=btoa(String.fromCharCode(...new Uint8Array(ab)));
+      audioData[k]={b64,type:blob.type||'audio/mpeg'};
+    }
+    const payload={version:1,apiKey,voiceSlots,selectedSlot,clips,audioData};
+    const a=document.createElement('a');
+    a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(payload));
+    a.download='xi-studio-'+Date.now()+'.json';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setStatus('io-status','Exported '+clips.length+' clips','ok');
+  }catch(e){setStatus('io-status','Export failed: '+(e.message||e),'err')}
+});
+
+document.getElementById('import-btn').addEventListener('click',()=>{
+  document.getElementById('import-input').value='';
+  document.getElementById('import-input').click();
+});
+
+document.getElementById('import-input').addEventListener('change',async e=>{
+  const file=e.target.files[0];if(!file)return;
+  setStatus('io-status','Importing…','busy');
+  try{
+    const data=JSON.parse(await file.text());
+    if(data.apiKey){apiKey=data.apiKey;keyInp.value=apiKey}
+    if(data.voiceSlots)voiceSlots=data.voiceSlots;
+    if(data.selectedSlot!==undefined)selectedSlot=data.selectedSlot;
+    // Merge clips (no duplicates)
+    const existing=new Set(clips.map(c=>c.id));
+    let imported=0;
+    for(const clip of(data.clips||[])){
+      const ad=(data.audioData||{})[clip.id];if(!ad)continue;
+      const bin=atob(ad.b64);const arr=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+      await idbPut(clip.id,new Blob([arr],{type:ad.type}));
+      if(!existing.has(clip.id)){clips.push(clip);imported++}
+    }
+    // Sort by created desc
+    clips.sort((a,b)=>(b.created||0)-(a.created||0));
+    saveState();renderSlots();renderClips();
+    setStatus('io-status','Imported '+imported+' clips, '+voiceSlots.length+' slots','ok');
+  }catch(err){setStatus('io-status','Import failed: '+(err.message||err),'err')}
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setStatus(id,msg,type=''){
+  const el=document.getElementById(id);
+  el.textContent=msg;el.className='status'+(type?' '+type:'');
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderSlots();
+renderClips();
+</script>
+</body>
+</html>
