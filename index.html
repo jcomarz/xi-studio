@@ -85,6 +85,7 @@ label.lbl{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);t
 .clip-mode-badge{font-family:'Space Mono',monospace;font-size:8px;padding:2px 5px;border-radius:4px;background:var(--s2);color:var(--muted);flex-shrink:0}
 .clip-mode-badge.tts{color:#7eb8f7}
 .clip-mode-badge.sfx{color:#c07ef7}
+.clip-mode-badge.loaded{color:#3ecf6e}
 .empty-state{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);text-align:center;padding:20px 0}
 
 /* ── waveform visualizer ── */
@@ -194,44 +195,111 @@ input[type=range]{flex:1;accent-color:var(--amber);height:4px;cursor:pointer}
       <label class="toggle"><input type="checkbox" id="loop-toggle"><div class="toggle-track"></div></label>
     </div>
 
+    <!-- Gap between loops -->
+    <div id="gap-row" style="display:none">
+      <div class="vol-row">
+        <label>Pause between loops</label>
+        <input type="range" id="gap-slider" min="0" max="60" step="1" value="5">
+        <span id="gap-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--amber);min-width:34px">5s</span>
+      </div>
+      <p class="io-hint" style="margin-top:4px">Silence between repeats. Ambient music continues during the pause.</p>
+    </div>
+
     <div class="divider"></div>
 
-    <!-- Binaural beats -->
+    <!-- Cadence / speed -->
+    <div>
+      <div class="vol-row">
+        <label>Cadence</label>
+        <input type="range" id="cadence-slider" min="50" max="200" step="5" value="100">
+        <span id="cadence-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--amber);min-width:34px">1×</span>
+      </div>
+      <p class="io-hint" style="margin-top:4px">Changes playback speed while preserving pitch. 1× = original. Apply before playing.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Ambient music -->
     <div class="toggle-row">
       <div class="bb-indicator">
         <div class="bb-dot" id="bb-dot"></div>
-        <span class="bb-label">Binaural beats overlay</span>
+        <span class="bb-label">Ambient music + binaural</span>
       </div>
       <label class="toggle"><input type="checkbox" id="bb-toggle"><div class="toggle-track"></div></label>
     </div>
 
     <div id="bb-controls" style="display:none;flex-direction:column;gap:10px">
+
+      <!-- Binaural preset -->
       <div>
-        <label class="lbl">Preset</label>
+        <label class="lbl">Binaural beat state</label>
         <div class="bb-presets" id="bb-presets">
-          <button class="bb-preset" data-freq="1.5" data-base="120">δ Delta 1.5Hz</button>
-          <button class="bb-preset" data-freq="4"   data-base="150">θ Theta 4Hz</button>
-          <button class="bb-preset" data-freq="8"   data-base="180">α Alpha 8Hz</button>
-          <button class="bb-preset" data-freq="14"  data-base="200">β Beta 14Hz</button>
-          <button class="bb-preset" data-freq="40"  data-base="220">γ Gamma 40Hz</button>
+          <button class="bb-preset" data-freq="1.5" data-base="120">δ Delta</button>
+          <button class="bb-preset active" data-freq="4" data-base="150">θ Theta</button>
+          <button class="bb-preset" data-freq="8" data-base="180">α Alpha</button>
+          <button class="bb-preset" data-freq="14" data-base="200">β Beta</button>
+          <button class="bb-preset" data-freq="40" data-base="220">γ Gamma</button>
         </div>
       </div>
+
+      <!-- Melodic texture -->
+      <div>
+        <label class="lbl">Melodic texture</label>
+        <div class="bb-presets" id="texture-tabs">
+          <button class="bb-preset active" data-tex="pad">Pad</button>
+          <button class="bb-preset" data-tex="arp">Arp + Pad</button>
+          <button class="bb-preset" data-tex="bowl">Bowls</button>
+          <button class="bb-preset" data-tex="drone">Drone</button>
+          <button class="bb-preset" data-tex="none">Beats only</button>
+        </div>
+      </div>
+
+      <!-- Key -->
+      <div class="vol-row">
+        <label>Root note</label>
+        <select id="bb-key" class="inp" style="flex:1;padding:5px 8px">
+          <option value="174.6">F3 — Solfeggio 174Hz</option>
+          <option value="196">G3</option>
+          <option value="220">A3 — Solfeggio 432Hz base</option>
+          <option value="246.9">B3</option>
+          <option value="261.6" selected>C4 — Middle C</option>
+          <option value="293.7">D4</option>
+          <option value="329.6">E4</option>
+          <option value="349.2">F4 — Solfeggio 528Hz range</option>
+          <option value="392">G4</option>
+          <option value="440">A4 — Concert</option>
+        </select>
+      </div>
+
+      <!-- Tempo (for arp) -->
+      <div class="vol-row" id="tempo-row" style="display:none">
+        <label>Arp tempo</label>
+        <input type="range" id="bb-tempo" min="20" max="120" step="5" value="50">
+        <span id="bb-tempo-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--amber);min-width:36px">50 bpm</span>
+      </div>
+
+      <!-- Reverb amount -->
+      <div class="vol-row">
+        <label>Reverb</label>
+        <input type="range" id="bb-reverb" min="0" max="100" value="55">
+        <span id="bb-reverb-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);min-width:30px">55%</span>
+      </div>
+
+      <!-- Music volume -->
+      <div class="vol-row">
+        <label>Music vol</label>
+        <input type="range" id="bb-vol" min="0" max="300" value="30">
+        <span id="bb-vol-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);min-width:30px">100%</span>
+      </div>
+
+      <!-- Beat Hz fine control -->
       <div class="vol-row">
         <label>Beat Hz</label>
         <input type="range" id="bb-freq" min="0.5" max="40" step="0.5" value="4">
         <span id="bb-freq-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--amber);min-width:32px">4Hz</span>
       </div>
-      <div class="vol-row">
-        <label>Base Hz</label>
-        <input type="range" id="bb-base" min="60" max="300" step="5" value="150">
-        <span id="bb-base-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);min-width:36px">150Hz</span>
-      </div>
-      <div class="vol-row">
-        <label>Volume</label>
-        <input type="range" id="bb-vol" min="0" max="100" value="18">
-        <span id="bb-vol-val" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);min-width:30px">18%</span>
-      </div>
-      <p class="io-hint">Use headphones — binaural beats require stereo separation to work. Left ear hears the base frequency, right ear hears base + beat Hz.</p>
+
+      <p class="io-hint">🎧 Headphones required for binaural effect. Music plays in speakers too — the binaural carrier is embedded beneath the melody.</p>
     </div>
 
   </div>
@@ -240,13 +308,15 @@ input[type=range]{flex:1;accent-color:var(--amber);height:4px;cursor:pointer}
 <!-- Clips -->
 <div class="card">
   <div class="card-hdr">
-    <span class="card-icon">📼</span><span class="card-title">Generated Clips</span>
+    <span class="card-icon">📼</span><span class="card-title">Clips</span>
     <span id="clip-count-badge" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--amber);background:var(--amber-glow);border-radius:8px;padding:2px 7px;margin-left:4px;display:none">0</span>
-    <button class="btn sm ghost danger" id="clear-all-btn" style="margin-left:auto">Clear all</button>
+    <button class="btn sm ghost" id="load-audio-btn" style="margin-left:auto" onclick="document.getElementById('load-audio-input').value='';document.getElementById('load-audio-input').click()">⬆ Load files</button>
+    <button class="btn sm ghost danger" id="clear-all-btn">Clear all</button>
   </div>
   <div class="card-body">
     <div class="clip-list" id="clip-list"></div>
   </div>
+  <input type="file" id="load-audio-input" accept="audio/*" multiple style="display:none">
 </div>
 
 <!-- Import / Export -->
@@ -287,15 +357,8 @@ let currentSource=null;
 let analyserNode=null;
 let waveRaf=null;
 let playingClipId=null;
-let loopEnabled=false;
 let loopClipId=null;
-
-// Binaural state
-let bbEnabled=false;
-let bbFreq=4;
-let bbBase=150;
-let bbVol=0.18;
-let bbOscL=null,bbOscR=null,bbGainL=null,bbGainR=null,bbMerger=null;
+let bbOscL=null,bbOscR=null;
 
 try{apiKey=localStorage.getItem('xi_studio_key')||''}catch(e){}
 try{voiceSlots=JSON.parse(localStorage.getItem('xi_studio_slots')||'[]')}catch(e){voiceSlots=[]}
@@ -326,6 +389,9 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 function stopCurrent(){
+  clearTimeout(loopTimeout);
+  if(cadenceAudio){cadenceAudio.pause();cadenceAudio.onended=null;cadenceAudio=null;}
+  if(cadenceObjectUrl){URL.revokeObjectURL(cadenceObjectUrl);cadenceObjectUrl=null;}
   if(currentSource){try{currentSource.stop()}catch(e){}currentSource=null}
   stopWave();
   if(playingClipId){
@@ -336,11 +402,13 @@ function stopCurrent(){
     playingClipId=null;
   }
   loopClipId=null;
-  stopBinaural();
 }
 
 // Decoded buffer cache so loop replays instantly
 const bufCache={};
+// Hidden audio element for cadence playback (preservesPitch support)
+let cadenceAudio=null;
+let cadenceObjectUrl=null;
 
 function playBlob(blob,clipId){
   unlockAudio();
@@ -350,31 +418,47 @@ function playBlob(blob,clipId){
 
   const doPlay=buf=>{
     bufCache[clipId]=buf;
-    const src=audioCtx.createBufferSource();
-    const analyser=audioCtx.createAnalyser();
-    analyser.fftSize=64;
-    src.buffer=buf;
-    src.loop=loopEnabled;
-    src.connect(analyser);
-    analyser.connect(audioCtx.destination);
-    src.start(0);
-    currentSource=src;
-    analyserNode=analyser;
+
+    function playOnce(){
+      // Use HTMLAudioElement when cadence != 1.0 for preservesPitch support
+      // Use WebAudio BufferSource at normal cadence for waveform visualiser
+      if(cadence!==1.0){
+        playWithCadence(blob,clipId);
+        return;
+      }
+
+      const src=audioCtx.createBufferSource();
+      const analyser=audioCtx.createAnalyser();
+      analyser.fftSize=64;
+      src.buffer=buf; src.loop=false;
+      src.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      src.start(0);
+      currentSource=src; analyserNode=analyser;
+      startWave();
+      src.onended=()=>{
+        if(currentSource!==src)return;
+        stopWave();
+        if(loopEnabled&&playingClipId===clipId){
+          loopTimeout=setTimeout(playOnce, loopGap*1000);
+        } else {
+          playingClipId=null;
+          const row=document.querySelector(`.clip-row[data-id="${clipId}"]`);
+          if(row)row.classList.remove('playing');
+          const pb=document.querySelector(`.clip-row[data-id="${clipId}"] [data-play]`);
+          if(pb)pb.textContent='▶';
+        }
+      };
+    }
+
     playingClipId=clipId;
     loopClipId=loopEnabled?clipId:null;
     const row=document.querySelector(`.clip-row[data-id="${clipId}"]`);
     if(row)row.classList.add('playing');
     const pb=document.querySelector(`.clip-row[data-id="${clipId}"] [data-play]`);
     if(pb)pb.textContent='■';
-    startWave();
     if(bbEnabled)startBinaural();
-    // Only wire onended when not looping — looping sources never fire onended
-    if(!loopEnabled){
-      src.onended=()=>{
-        // Guard: only clean up if this source is still the active one
-        if(currentSource===src)stopCurrent();
-      };
-    }
+    playOnce();
   };
 
   if(bufCache[clipId]){doPlay(bufCache[clipId]);return;}
@@ -382,6 +466,46 @@ function playBlob(blob,clipId){
     .then(ab=>new Promise((res,rej)=>audioCtx.decodeAudioData(ab,res,rej)))
     .then(doPlay)
     .catch(()=>setStatus('gen-status','Could not decode audio','err'));
+}
+
+function playWithCadence(blob,clipId){
+  // Revoke previous object URL
+  if(cadenceObjectUrl){URL.revokeObjectURL(cadenceObjectUrl);cadenceObjectUrl=null;}
+  if(cadenceAudio){cadenceAudio.pause();cadenceAudio.src='';}
+
+  cadenceObjectUrl=URL.createObjectURL(blob);
+  cadenceAudio=new Audio(cadenceObjectUrl);
+  cadenceAudio.playbackRate=cadence;
+  // preservesPitch: Chrome/Android supports this
+  if('preservesPitch' in cadenceAudio) cadenceAudio.preservesPitch=true;
+  else if('mozPreservesPitch' in cadenceAudio) cadenceAudio.mozPreservesPitch=true;
+
+  // Connect to AudioContext for waveform (optional, degrades gracefully)
+  try{
+    const src=audioCtx.createMediaElementSource(cadenceAudio);
+    const analyser=audioCtx.createAnalyser();
+    analyser.fftSize=64;
+    src.connect(analyser); analyser.connect(audioCtx.destination);
+    analyserNode=analyser; currentSource={stop:()=>cadenceAudio.pause()};
+    startWave();
+  }catch(e){
+    // If already used as MediaElementSource, just play directly
+    currentSource={stop:()=>cadenceAudio.pause()};
+  }
+
+  cadenceAudio.play().catch(()=>{});
+  cadenceAudio.onended=()=>{
+    stopWave();
+    if(loopEnabled&&playingClipId===clipId){
+      loopTimeout=setTimeout(()=>playWithCadence(blob,clipId), loopGap*1000);
+    } else {
+      playingClipId=null;
+      const row=document.querySelector(`.clip-row[data-id="${clipId}"]`);
+      if(row)row.classList.remove('playing');
+      const pb=document.querySelector(`.clip-row[data-id="${clipId}"] [data-play]`);
+      if(pb)pb.textContent='▶';
+    }
+  };
 }
 
 // ── Waveform ──────────────────────────────────────────────────────────────────
@@ -413,49 +537,235 @@ function stopWave(){
   bars.forEach(b=>b.style.height='3px');
 }
 
-// ── Binaural beats ────────────────────────────────────────────────────────────
-// Uses StereoPannerNode: left osc panned hard left, right osc panned hard right.
-// Brain perceives the difference between the two frequencies as a beat.
+// ── Ambient music engine ──────────────────────────────────────────────────────
+// Binaural carrier + melodic pad/arp/bowls layered on top
+
+let bbEnabled=false;
+let bbFreq=4, bbBase=150, bbVol=1.0, bbReverb=0.55;
+let bbTexture='pad'; // pad | arp | bowl | drone | none
+let bbKey=261.6; // root Hz
+let bbTempo=50;
+let loopEnabled=false;
+let loopGap=5;
+let cadence=1.0; // playback rate multiplier, pitch-compensated
+let loopTimeout=null;
+
+// Active nodes — all stopped together
+let ambNodes=[]; // all oscillators/sources to stop
+let bbMasterGain=null;
+
+// Pentatonic scale ratios from root
+const PENTA=[1, 9/8, 5/4, 3/2, 5/3, 2];
+// Chord voicings (indices into PENTA, multiple octaves)
+const CHORD_NOTES=[0,2,3,0*2, 1*0.5, 3*0.5]; // root, major third, fifth + octave
+
 function startBinaural(){
   stopBinaural();
   unlockAudio();
   if(!audioCtx)return;
 
-  const masterGain=audioCtx.createGain();
-  masterGain.gain.value=bbVol;
-  masterGain.connect(audioCtx.destination);
+  bbMasterGain=audioCtx.createGain();
+  bbMasterGain.gain.value=bbVol;
+  bbMasterGain.connect(audioCtx.destination);
+  ambNodes=[];
 
-  // Left ear: base frequency, panned hard left
-  bbOscL=audioCtx.createOscillator();
-  bbOscL.type='sine';
-  bbOscL.frequency.value=bbBase;
-  const panL=audioCtx.createStereoPanner();
-  panL.pan.value=-1;
-  bbOscL.connect(panL);
-  panL.connect(masterGain);
+  // Reverb
+  const reverbNode=makeReverb(audioCtx,3.5,bbReverb);
+  const dryGain=audioCtx.createGain();
+  const wetGain=audioCtx.createGain();
+  dryGain.gain.value=0.7;
+  wetGain.gain.value=bbReverb*0.9;
+  reverbNode.connect(wetGain);
+  dryGain.connect(bbMasterGain);
+  wetGain.connect(bbMasterGain);
 
-  // Right ear: base + beat frequency, panned hard right
-  bbOscR=audioCtx.createOscillator();
-  bbOscR.type='sine';
-  bbOscR.frequency.value=bbBase+bbFreq;
-  const panR=audioCtx.createStereoPanner();
-  panR.pan.value=1;
-  bbOscR.connect(panR);
-  panR.connect(masterGain);
+  // Binaural carrier — kept quiet underneath melody
+  const binauralGain=audioCtx.createGain();
+  binauralGain.gain.value=0.07; // much quieter than melody
+  binauralGain.connect(bbMasterGain);
 
-  // Store refs for freq updates and gain
-  bbGainL=masterGain; // shared gain
-  bbMerger=masterGain; // reuse field to track master gain node
+  const oscL=audioCtx.createOscillator();
+  oscL.type='sine'; oscL.frequency.value=bbBase;
+  const panL=audioCtx.createStereoPanner(); panL.pan.value=-1;
+  oscL.connect(panL); panL.connect(binauralGain);
+  oscL.start(); ambNodes.push(oscL);
 
-  bbOscL.start();
-  bbOscR.start();
+  const oscR=audioCtx.createOscillator();
+  oscR.type='sine'; oscR.frequency.value=bbBase+bbFreq;
+  const panR=audioCtx.createStereoPanner(); panR.pan.value=1;
+  oscR.connect(panR); panR.connect(binauralGain);
+  oscR.start(); ambNodes.push(oscR);
+  bbOscL=oscL; bbOscR=oscR;
+
+  // Melodic texture
+  if(bbTexture==='pad'||bbTexture==='arp') buildPad(audioCtx,dryGain,reverbNode,bbKey);
+  if(bbTexture==='arp')                   buildArp(audioCtx,dryGain,reverbNode,bbKey,bbTempo);
+  if(bbTexture==='bowl')                  buildBowls(audioCtx,dryGain,reverbNode,bbKey);
+  if(bbTexture==='drone')                 buildDrone(audioCtx,dryGain,reverbNode,bbKey);
+
   document.getElementById('bb-dot').classList.add('on');
 }
 
+// ── Synthesizer builders ──────────────────────────────────────────────────────
+
+function makeReverb(ctx, duration, wet){
+  const convolver=ctx.createConvolver();
+  const rate=ctx.sampleRate, len=rate*duration;
+  const buf=ctx.createBuffer(2,len,rate);
+  for(let c=0;c<2;c++){
+    const d=buf.getChannelData(c);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.5);
+  }
+  convolver.buffer=buf;
+  return convolver;
+}
+
+function makeSineWithEnv(ctx, freq, gainVal, attack, dest, detuneHz=0){
+  const osc=ctx.createOscillator();
+  const g=ctx.createGain();
+  osc.type='sine';
+  osc.frequency.value=freq+(detuneHz||0);
+  g.gain.setValueAtTime(0,ctx.currentTime);
+  g.gain.linearRampToValueAtTime(gainVal, ctx.currentTime+attack);
+  osc.connect(g); g.connect(dest);
+  osc.start();
+  ambNodes.push(osc);
+  return {osc,g};
+}
+
+function buildPad(ctx, dry, reverb, root){
+  // Static deep pad — root + fifth + octave, two octaves down from root
+  // Never changes pitch. Just a warm bed of tone.
+  const baseRoot = root * 0.25; // two octaves down for depth
+  const voices = [
+    {freq: baseRoot,        gain: 0.20, attack: 4.0},
+    {freq: baseRoot * 3/2,  gain: 0.14, attack: 5.5},
+    {freq: baseRoot * 2,    gain: 0.10, attack: 7.0},
+    {freq: baseRoot * 0.5,  gain: 0.12, attack: 6.0}, // sub bass
+    // Slightly detuned copies for width
+    {freq: baseRoot + 0.8,        gain: 0.07, attack: 4.5},
+    {freq: baseRoot * 3/2 - 0.6,  gain: 0.05, attack: 6.0},
+  ];
+  voices.forEach(({freq, gain, attack}) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(gain, ctx.currentTime + attack);
+    osc.connect(g);
+    g.connect(dry);
+    g.connect(reverb);
+    osc.start();
+    ambNodes.push(osc);
+  });
+  // Very slow LFO tremolo — barely perceptible movement
+  const lfo = ctx.createOscillator();
+  const lfoG = ctx.createGain();
+  lfo.frequency.value = 0.05;
+  lfoG.gain.value = 0.025;
+  lfo.connect(lfoG);
+  lfoG.connect(dry.gain ? dry.gain : dry);
+  lfo.start();
+  ambNodes.push(lfo);
+}
+
+function buildArp(ctx, dry, reverb, root){
+  // Simple ascending pentatonic arp — louder and clear, stays in key, no pattern changes
+  const bpm = bbTempo;
+  const stepSec = 60 / bpm;
+  // One octave pentatonic from the root (not shifted down — stays melodic/audible)
+  const scale = [root, root*9/8, root*5/4, root*3/2, root*5/3, root*2, root*5/3, root*3/2, root*5/4, root*9/8];
+  let step = 0;
+
+  function scheduleNote(){
+    const freq = scale[step % scale.length];
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(0.22, t + 0.04); // louder attack
+    env.gain.setTargetAtTime(0, t + 0.04, stepSec * 0.7);
+    osc.connect(env);
+    env.connect(dry);
+    env.connect(reverb);
+    osc.start(t);
+    osc.stop(t + stepSec * 3);
+    ambNodes.push(osc);
+    step++;
+  }
+  scheduleNote();
+  const arpTimer = setInterval(scheduleNote, stepSec * 1000);
+  ambNodes._arpTimer = arpTimer;
+}
+
+function buildDrone(ctx, dry, reverb, root){
+  // Deep sub drone — very low, very static, slight LFO wobble
+  const sub = root * 0.125; // three octaves down
+  [
+    [sub,       0.25, 0.03],
+    [sub * 2,   0.18, 0.04],
+    [sub * 3/2, 0.12, 0.05],
+    [sub * 4,   0.08, 0.07],
+  ].forEach(([freq, gain, lfoRate], i) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const lfo = ctx.createOscillator();
+    const lfoG = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    lfo.frequency.value = lfoRate;
+    lfoG.gain.value = freq * 0.006; // subtle pitch wobble
+    lfo.connect(lfoG);
+    lfoG.connect(osc.frequency);
+    g.gain.setValueAtTime(0, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(gain, ctx.currentTime + 5 + i);
+    osc.connect(g);
+    g.connect(dry);
+    g.connect(reverb);
+    osc.start();
+    lfo.start();
+    ambNodes.push(osc, lfo);
+  });
+}
+
+function buildBowls(ctx, dry, reverb, root){
+  const partials=[1, 2.756, 5.404, 8.933, 13.34];
+  const strikes=[0, 2.5, 5.5, 9.5, 14];
+  const bowlRoot=root*0.5;
+  function strikeAll(when){
+    partials.forEach((ratio,pi)=>{
+      const freq=bowlRoot*ratio;
+      if(freq>ctx.sampleRate/2)return;
+      const osc=ctx.createOscillator();
+      const env=ctx.createGain();
+      osc.type='sine'; osc.frequency.value=freq;
+      const t=ctx.currentTime+when;
+      const decayTime=6-pi*0.8;
+      env.gain.setValueAtTime(0,t);
+      env.gain.linearRampToValueAtTime(0.18/(pi+1),t+0.01);
+      env.gain.setTargetAtTime(0,t+0.01,decayTime);
+      osc.connect(env); env.connect(dry); env.connect(reverb);
+      osc.start(t); osc.stop(t+decayTime*5);
+      ambNodes.push(osc);
+    });
+  }
+  strikes.forEach(w=>strikeAll(w));
+  const bowlTimer=setInterval(()=>{
+    if(bbMasterGain)strikeAll(0);
+  },16000);
+  ambNodes._bowlTimer=bowlTimer;
+}
+
 function stopBinaural(){
-  if(bbOscL){try{bbOscL.stop()}catch(e){}bbOscL=null}
-  if(bbOscR){try{bbOscR.stop()}catch(e){}bbOscR=null}
-  bbMerger=null;bbGainL=null;
+  if(ambNodes._arpTimer)clearInterval(ambNodes._arpTimer);
+  if(ambNodes._bowlTimer)clearInterval(ambNodes._bowlTimer);
+  if(ambNodes._chordTimer)clearInterval(ambNodes._chordTimer);
+  ambNodes.forEach(n=>{if(n&&n.stop)try{n.stop()}catch(e){}});
+  ambNodes=[];
+  bbOscL=null; bbOscR=null; bbMasterGain=null;
   document.getElementById('bb-dot').classList.remove('on');
 }
 
@@ -467,63 +777,120 @@ function updateBinauralFreqs(){
 }
 
 function updateBinauralVol(){
-  if(bbMerger)bbMerger.gain.setTargetAtTime(bbVol,audioCtx.currentTime,0.05);
+  if(bbMasterGain&&audioCtx)bbMasterGain.gain.setTargetAtTime(bbVol,audioCtx.currentTime,0.05);
+}
+
+// ── Loop gap playback engine ──────────────────────────────────────────────────
+// Replaces BufferSource.loop — gives us a configurable gap between repeats
+
+function scheduleLoopPlay(blob, clipId){
+  if(!loopEnabled)return;
+  clearTimeout(loopTimeout);
+  const src=audioCtx.createBufferSource();
+  src.buffer=bufCache[clipId];
+  const analyser=audioCtx.createAnalyser();
+  analyser.fftSize=64;
+  src.connect(analyser); analyser.connect(audioCtx.destination);
+  src.start(0);
+  currentSource=src; analyserNode=analyser;
+  startWave();
+  src.onended=()=>{
+    if(!loopEnabled||playingClipId!==clipId){stopCurrent();return;}
+    // Wait gap then play again
+    loopTimeout=setTimeout(()=>{
+      if(loopEnabled&&playingClipId===clipId){
+        stopWave();
+        scheduleLoopPlay(blob,clipId);
+      }
+    }, loopGap*1000);
+  };
 }
 
 // ── Loop & Binaural UI ────────────────────────────────────────────────────────
 document.getElementById('loop-toggle').addEventListener('change',e=>{
   loopEnabled=e.target.checked;
-  if(currentSource){
-    currentSource.loop=loopEnabled;
-    if(!loopEnabled){
-      // Wire cleanup now that we've turned off loop
-      const src=currentSource;
-      const cid=playingClipId;
-      src.onended=()=>{if(currentSource===src)stopCurrent()};
-    } else {
-      currentSource.onended=null;
-    }
+  document.getElementById('gap-row').style.display=loopEnabled?'block':'none';
+  if(!loopEnabled){
+    clearTimeout(loopTimeout);
+    if(currentSource){currentSource.loop=false;}
   }
+});
+
+document.getElementById('gap-slider').addEventListener('input',e=>{
+  loopGap=parseInt(e.target.value);
+  document.getElementById('gap-val').textContent=loopGap+'s';
+});
+
+document.getElementById('cadence-slider').addEventListener('input',e=>{
+  cadence=parseInt(e.target.value)/100;
+  const label=cadence===1?'1×':cadence.toFixed(2)+'×';
+  document.getElementById('cadence-val').textContent=label;
 });
 
 document.getElementById('bb-toggle').addEventListener('change',e=>{
   bbEnabled=e.target.checked;
   document.getElementById('bb-controls').style.display=bbEnabled?'flex':'none';
-  if(bbEnabled&&playingClipId)startBinaural();
+  if(bbEnabled)startBinaural();
   else stopBinaural();
 });
 
-// Presets
-document.querySelectorAll('.bb-preset').forEach(btn=>{
+// Binaural presets
+document.querySelectorAll('#bb-presets .bb-preset').forEach(btn=>{
   btn.addEventListener('click',()=>{
-    document.querySelectorAll('.bb-preset').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('#bb-presets .bb-preset').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     bbFreq=parseFloat(btn.dataset.freq);
     bbBase=parseFloat(btn.dataset.base);
     document.getElementById('bb-freq').value=bbFreq;
-    document.getElementById('bb-base').value=bbBase;
     document.getElementById('bb-freq-val').textContent=bbFreq+'Hz';
-    document.getElementById('bb-base-val').textContent=bbBase+'Hz';
     updateBinauralFreqs();
   });
 });
 
-// Sliders
+// Texture selector
+document.querySelectorAll('#texture-tabs .bb-preset').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#texture-tabs .bb-preset').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    bbTexture=btn.dataset.tex;
+    document.getElementById('tempo-row').style.display=bbTexture==='arp'?'flex':'none';
+    if(bbEnabled)startBinaural(); // restart with new texture
+  });
+});
+
+// Key selector
+document.getElementById('bb-key').addEventListener('change',e=>{
+  bbKey=parseFloat(e.target.value);
+  if(bbEnabled)startBinaural();
+});
+
+// Tempo
+document.getElementById('bb-tempo').addEventListener('input',e=>{
+  bbTempo=parseInt(e.target.value);
+  document.getElementById('bb-tempo-val').textContent=bbTempo+' bpm';
+  if(bbEnabled&&bbTexture==='arp')startBinaural();
+});
+
+// Reverb
+document.getElementById('bb-reverb').addEventListener('input',e=>{
+  bbReverb=parseInt(e.target.value)/100;
+  document.getElementById('bb-reverb-val').textContent=e.target.value+'%';
+  if(bbEnabled)startBinaural();
+});
+
+// Volume
+document.getElementById('bb-vol').addEventListener('input',e=>{
+  bbVol=parseInt(e.target.value)/30;
+  document.getElementById('bb-vol-val').textContent=Math.round(bbVol*100)+'%';
+  updateBinauralVol();
+});
+
+// Beat Hz fine
 document.getElementById('bb-freq').addEventListener('input',e=>{
   bbFreq=parseFloat(e.target.value);
   document.getElementById('bb-freq-val').textContent=bbFreq+'Hz';
-  document.querySelectorAll('.bb-preset').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#bb-presets .bb-preset').forEach(b=>b.classList.remove('active'));
   updateBinauralFreqs();
-});
-document.getElementById('bb-base').addEventListener('input',e=>{
-  bbBase=parseFloat(e.target.value);
-  document.getElementById('bb-base-val').textContent=bbBase+'Hz';
-  updateBinauralFreqs();
-});
-document.getElementById('bb-vol').addEventListener('input',e=>{
-  bbVol=parseInt(e.target.value)/100;
-  document.getElementById('bb-vol-val').textContent=e.target.value+'%';
-  updateBinauralVol();
 });
 const keyInp=document.getElementById('xi-key');
 if(apiKey)keyInp.value=apiKey;
@@ -779,6 +1146,20 @@ function audioBufferToWav(buf){
   }
   return new Blob([ab],{type:'audio/wav'});
 }
+
+document.getElementById('load-audio-input').addEventListener('change',async e=>{
+  const files=Array.from(e.target.files);
+  if(!files.length)return;
+  let added=0;
+  for(const file of files){
+    const id=uid();
+    await idbPut(id,file);
+    clips.unshift({id,name:file.name.replace(/\.[^.]+$/,'').slice(0,48)+' [loaded]',mode:'loaded',voiceSlotId:null,created:Date.now()});
+    added++;
+  }
+  saveState();renderClips();
+  setStatus('gen-status',added+' file'+(added!==1?'s':'')+' loaded','ok');
+});
 
 document.getElementById('clear-all-btn').addEventListener('click',async()=>{
   if(!confirm('Delete all clips?'))return;
