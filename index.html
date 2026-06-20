@@ -143,6 +143,11 @@ input[type=range]{flex:1;accent-color:var(--amber);height:4px;cursor:pointer}
   <span class="hdr-sub">ElevenLabs Generator</span>
 </div>
 
+<!-- Android audio unlock banner -->
+<div id="audio-unlock-banner" style="background:var(--amber-glow);border:1px solid var(--amber-dim);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--amber);text-align:center;cursor:pointer">
+  🔇 Tap here to enable audio playback
+</div>
+
 <!-- API Key -->
 <div class="card">
   <div class="card-hdr"><span class="card-icon">🔑</span><span class="card-title">API Key</span></div>
@@ -439,19 +444,48 @@ function saveState(){
 }
 
 // ── Audio ─────────────────────────────────────────────────────────────────────
-function unlockAudio(){
-  if(!audioCtx)try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}
-  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+// ── AudioContext — unlock on first user gesture ────────────────────────────────
+// Android Chrome requires AudioContext.resume() to be called SYNCHRONOUSLY
+// inside a user gesture handler. We do this by intercepting the very first
+// tap/click anywhere on the page, creating + resuming the context then.
+let _audioUnlocked = false;
+let _audioUnlockResolvers = [];
+
+function _doUnlock(){
+  if(_audioUnlocked) return;
+  if(!audioCtx){
+    try{ audioCtx = new(window.AudioContext||window.webkitAudioContext)(); }
+    catch(e){ return; }
+  }
+  // resume() MUST be called synchronously here (inside the event handler)
+  const p = audioCtx.state === 'running'
+    ? Promise.resolve()
+    : audioCtx.resume();
+  p.then(()=>{
+    _audioUnlocked = true;
+    _audioUnlockResolvers.forEach(r=>r());
+    _audioUnlockResolvers = [];
+    // Hide the unlock banner
+    const banner = document.getElementById('audio-unlock-banner');
+    if(banner) banner.style.display = 'none';
+  }).catch(()=>{});
 }
 
-// Keep AudioContext alive when tab loses focus
+// Attach to document so any tap unlocks audio
+['touchstart','mousedown','pointerdown'].forEach(ev=>{
+  document.addEventListener(ev, _doUnlock, {once:false, passive:true, capture:true});
+});
+
+function unlockAudio(){
+  if(_audioUnlocked && audioCtx && audioCtx.state==='running') return Promise.resolve();
+  _doUnlock(); // try synchronously first (works if we're inside a gesture)
+  if(_audioUnlocked && audioCtx && audioCtx.state==='running') return Promise.resolve();
+  // Not yet unlocked — return a promise that resolves when it is
+  return new Promise(res=>_audioUnlockResolvers.push(res));
+}
+
 document.addEventListener('visibilitychange',()=>{
-  if(!audioCtx)return;
-  if(document.hidden){
-    // Don't suspend — let audio continue playing in background
-  } else {
-    if(audioCtx.state==='suspended')audioCtx.resume();
-  }
+  if(audioCtx && audioCtx.state==='suspended') audioCtx.resume().catch(()=>{});
 });
 
 function stopCurrent(){
@@ -477,10 +511,13 @@ let cadenceAudio=null;
 let cadenceObjectUrl=null;
 
 function playBlob(blob,clipId){
-  unlockAudio();
-  if(!audioCtx)return;
+  if(!audioCtx||audioCtx.state!=='running'){unlockAudio();return;}
   if(playingClipId===clipId){stopCurrent();return;}
   stopCurrent();
+  _playBlobInner(blob,clipId);
+}
+
+function _playBlobInner(blob,clipId){
 
   const doPlay=buf=>{
     bufCache[clipId]=buf;
@@ -572,7 +609,7 @@ function playWithCadence(blob,clipId){
       if(pb)pb.textContent='▶';
     }
   };
-}
+} // end playWithCadence
 
 // ── Waveform ──────────────────────────────────────────────────────────────────
 const waveEl=document.getElementById('waveform');
@@ -627,28 +664,43 @@ const CHORD_NOTES=[0,2,3,0*2, 1*0.5, 3*0.5]; // root, major third, fifth + octav
 
 function startBinaural(){
   stopBinaural();
-  unlockAudio();
-  if(!audioCtx)return;
+  if(!audioCtx||audioCtx.state!=='running') return;
+  _startBinauralInner();
+}
 
+function _startBinauralInner(){
   bbMasterGain=audioCtx.createGain();
   bbMasterGain.gain.value=bbVol;
-  bbMasterGain.connect(audioCtx.destination);
+
+  // Compressor as safety net
+  const comp=audioCtx.createDynamicsCompressor();
+  comp.threshold.value=-12; comp.knee.value=6;
+  comp.ratio.value=4; comp.attack.value=0.003; comp.release.value=0.15;
+  bbMasterGain.connect(comp);
+  comp.connect(audioCtx.destination);
   ambNodes=[];
 
-  // Reverb
-  const reverbNode=makeReverb(audioCtx,3.5,bbReverb);
-  const dryGain=audioCtx.createGain();
-  const wetGain=audioCtx.createGain();
-  dryGain.gain.value=0.7;
-  wetGain.gain.value=bbReverb*0.9;
-  reverbNode.connect(wetGain);
-  dryGain.connect(bbMasterGain);
-  wetGain.connect(bbMasterGain);
+  // Simple delay for space — much cheaper than ConvolverNode
+  // Feedback delay: output → delay → gain(0.3) → delay input
+  const delayNode=audioCtx.createDelay(0.5);
+  const delayFb=audioCtx.createGain();
+  const delayWet=audioCtx.createGain();
+  delayNode.delayTime.value=0.28;
+  delayFb.gain.value=0.28;   // feedback amount
+  delayWet.gain.value=bbReverb*0.35; // wet mix
+  delayNode.connect(delayFb); delayFb.connect(delayNode); // feedback loop
+  delayNode.connect(delayWet); delayWet.connect(bbMasterGain);
 
-  // Binaural carrier — kept quiet underneath melody
+  // Single output bus — all synth voices connect here
+  const bus=audioCtx.createGain();
+  bus.gain.value=1.0;
+  bus.connect(bbMasterGain);  // dry
+  bus.connect(delayNode);      // also feed delay
+
+  // Binaural carrier
   const binauralGain=audioCtx.createGain();
-  binauralGain.gain.value=0.07; // much quieter than melody
-  binauralGain.connect(bbMasterGain);
+  binauralGain.gain.value=0.06;
+  binauralGain.connect(bbMasterGain); // carrier bypasses delay
 
   const oscL=audioCtx.createOscillator();
   oscL.type='sine'; oscL.frequency.value=bbBase;
@@ -663,118 +715,92 @@ function startBinaural(){
   oscR.start(); ambNodes.push(oscR);
   bbOscL=oscL; bbOscR=oscR;
 
-  // Melodic texture
-  if(bbTexture==='pad'||bbTexture==='arp') buildPad(audioCtx,dryGain,reverbNode,bbKey);
-  if(bbTexture==='arp')                   buildArp(audioCtx,dryGain,reverbNode,bbKey,bbTempo);
-  if(bbTexture==='bowl')                  buildBowls(audioCtx,dryGain,reverbNode,bbKey);
-  if(bbTexture==='drone')                 buildDrone(audioCtx,dryGain,reverbNode,bbKey);
+  if(bbTexture==='pad'||bbTexture==='arp') buildPad(audioCtx,bus,bbKey);
+  if(bbTexture==='arp')                   buildArp(audioCtx,bus,bbKey,bbTempo);
+  if(bbTexture==='bowl')                  buildBowls(audioCtx,bus,bbKey);
+  if(bbTexture==='drone')                 buildDrone(audioCtx,bus,bbKey);
 
   document.getElementById('bb-dot').classList.add('on');
 }
 
 // ── Synthesizer builders ──────────────────────────────────────────────────────
 
-function makeReverb(ctx, duration, wet){
-  const convolver=ctx.createConvolver();
-  const rate=ctx.sampleRate, len=rate*duration;
-  const buf=ctx.createBuffer(2,len,rate);
-  for(let c=0;c<2;c++){
-    const d=buf.getChannelData(c);
-    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.5);
-  }
-  convolver.buffer=buf;
-  return convolver;
-}
 
-function makeSineWithEnv(ctx, freq, gainVal, attack, dest, detuneHz=0){
-  const osc=ctx.createOscillator();
-  const g=ctx.createGain();
-  osc.type='sine';
-  osc.frequency.value=freq+(detuneHz||0);
-  g.gain.setValueAtTime(0,ctx.currentTime);
-  g.gain.linearRampToValueAtTime(gainVal, ctx.currentTime+attack);
-  osc.connect(g); g.connect(dest);
-  osc.start();
-  ambNodes.push(osc);
-  return {osc,g};
-}
 
-function buildPad(ctx, dry, reverb, root){
-  // Static deep pad — root + fifth + octave, two octaves down from root
-  // Never changes pitch. Just a warm bed of tone.
-  const baseRoot = root * 0.25; // two octaves down for depth
-  const voices = [
-    {freq: baseRoot,        gain: 0.20, attack: 4.0},
-    {freq: baseRoot * 3/2,  gain: 0.14, attack: 5.5},
-    {freq: baseRoot * 2,    gain: 0.10, attack: 7.0},
-    {freq: baseRoot * 0.5,  gain: 0.12, attack: 6.0}, // sub bass
-    // Slightly detuned copies for width
-    {freq: baseRoot + 0.8,        gain: 0.07, attack: 4.5},
-    {freq: baseRoot * 3/2 - 0.6,  gain: 0.05, attack: 6.0},
-  ];
-  voices.forEach(({freq, gain, attack}) => {
+function buildPad(ctx, bus, root){
+  // Minimal pad: just root and fifth, two octaves down, slow fade in
+  // exponentialRamp is smoother than linearRamp for audio params
+  const baseRoot = root * 0.25;
+  [[baseRoot, 0.08], [baseRoot * 3/2, 0.05]].forEach(([freq, gain])=>{
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
     osc.type = 'sine';
     osc.frequency.value = freq;
-    g.gain.setValueAtTime(0, ctx.currentTime);
-    g.gain.linearRampToValueAtTime(gain, ctx.currentTime + attack);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(gain, ctx.currentTime + 6.0);
     osc.connect(g);
-    g.connect(dry);
-    g.connect(reverb);
+    g.connect(bus);
     osc.start();
     ambNodes.push(osc);
   });
-  // Very slow LFO tremolo — barely perceptible movement
-  const lfo = ctx.createOscillator();
-  const lfoG = ctx.createGain();
-  lfo.frequency.value = 0.05;
-  lfoG.gain.value = 0.025;
-  lfo.connect(lfoG);
-  lfoG.connect(dry.gain ? dry.gain : dry);
-  lfo.start();
-  ambNodes.push(lfo);
 }
 
-function buildArp(ctx, dry, reverb, root){
-  // Simple ascending pentatonic arp — louder and clear, stays in key, no pattern changes
+function buildArp(ctx, bus, root){
+  // Zero-allocation melody: one oscillator + gain LFO
+  // Frequency steps via scheduled setValueAtTime — no node creation after startup
   const bpm = bbTempo;
   const stepSec = 60 / bpm;
-  // One octave pentatonic from the root (not shifted down — stays melodic/audible)
   const scale = [root, root*9/8, root*5/4, root*3/2, root*5/3, root*2, root*5/3, root*3/2, root*5/4, root*9/8];
-  let step = 0;
 
-  function scheduleNote(){
-    const freq = scale[step % scale.length];
-    const t = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const env = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(0.22, t + 0.04); // louder attack
-    env.gain.setTargetAtTime(0, t + 0.04, stepSec * 0.7);
-    osc.connect(env);
-    env.connect(dry);
-    env.connect(reverb);
-    osc.start(t);
-    osc.stop(t + stepSec * 3);
-    ambNodes.push(osc);
-    step++;
+  const osc = ctx.createOscillator();
+  const gainNode = ctx.createGain();
+  // LFO to pulse the gain — creates note-like rhythm without allocating nodes
+  const lfo = ctx.createOscillator();
+  const lfoGain = ctx.createGain();
+
+  osc.type = 'sine';
+  osc.frequency.value = scale[0];
+  gainNode.gain.setValueAtTime(0.0001, ctx.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.13, ctx.currentTime + stepSec);
+
+  // LFO pulses at note rate, shaping amplitude
+  lfo.frequency.value = bpm / 60; // one pulse per beat
+  lfoGain.gain.value = 0.06; // depth — keeps gain always positive
+
+  lfo.connect(lfoGain);
+  lfoGain.connect(gainNode.gain);
+  osc.connect(gainNode);
+  gainNode.connect(bus);
+  osc.start();
+  lfo.start();
+  ambNodes.push(osc, lfo);
+
+  // Schedule frequency steps using Web Audio clock — zero allocation
+  let step = 0;
+  const LOOKAHEAD = 2.0; // schedule 2s ahead
+  let nextStepTime = ctx.currentTime + stepSec;
+
+  function scheduler(){
+    const now = ctx.currentTime;
+    while(nextStepTime < now + LOOKAHEAD){
+      step++;
+      osc.frequency.setValueAtTime(scale[step % scale.length], nextStepTime);
+      nextStepTime += stepSec;
+    }
   }
-  scheduleNote();
-  const arpTimer = setInterval(scheduleNote, stepSec * 1000);
+  scheduler();
+  const arpTimer = setInterval(scheduler, 500); // only needs to run every 500ms
   ambNodes._arpTimer = arpTimer;
 }
 
-function buildDrone(ctx, dry, reverb, root){
+function buildDrone(ctx, bus, root){
   // Deep sub drone — very low, very static, slight LFO wobble
   const sub = root * 0.125; // three octaves down
   [
-    [sub,       0.25, 0.03],
-    [sub * 2,   0.18, 0.04],
-    [sub * 3/2, 0.12, 0.05],
-    [sub * 4,   0.08, 0.07],
+    [sub,       0.10, 0.03],
+    [sub * 2,   0.07, 0.04],
+    [sub * 3/2, 0.05, 0.05],
+    [sub * 4,   0.03, 0.07],
   ].forEach(([freq, gain, lfoRate], i) => {
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
@@ -787,17 +813,17 @@ function buildDrone(ctx, dry, reverb, root){
     lfo.connect(lfoG);
     lfoG.connect(osc.frequency);
     g.gain.setValueAtTime(0, ctx.currentTime);
-    g.gain.linearRampToValueAtTime(gain, ctx.currentTime + 5 + i);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(gain, ctx.currentTime + 5 + i);
     osc.connect(g);
-    g.connect(dry);
-    g.connect(reverb);
+    g.connect(bus);
     osc.start();
     lfo.start();
     ambNodes.push(osc, lfo);
   });
 }
 
-function buildBowls(ctx, dry, reverb, root){
+function buildBowls(ctx, bus, root){
   const partials=[1, 2.756, 5.404, 8.933, 13.34];
   const strikes=[0, 2.5, 5.5, 9.5, 14];
   const bowlRoot=root*0.5;
@@ -811,7 +837,7 @@ function buildBowls(ctx, dry, reverb, root){
       const t=ctx.currentTime+when;
       const decayTime=6-pi*0.8;
       env.gain.setValueAtTime(0,t);
-      env.gain.linearRampToValueAtTime(0.18/(pi+1),t+0.01);
+      env.gain.exponentialRampToValueAtTime(Math.max(0.0001, 0.18/(pi+1)),t+0.01);
       env.gain.setTargetAtTime(0,t+0.01,decayTime);
       osc.connect(env); env.connect(dry); env.connect(reverb);
       osc.start(t); osc.stop(t+decayTime*5);
@@ -894,6 +920,7 @@ document.getElementById('cadence-slider').addEventListener('input',e=>{
 });
 
 document.getElementById('bb-toggle').addEventListener('change',e=>{
+  _doUnlock();
   bbEnabled=e.target.checked;
   document.getElementById('bb-controls').style.display=bbEnabled?'flex':'none';
   if(bbEnabled)startBinaural();
@@ -1113,6 +1140,7 @@ function renderClips(){
         <button class="btn sm ghost danger" data-del="${clip.id}" title="Delete">✕</button>
       </div>`;
     row.querySelector('[data-play]').addEventListener('click',()=>{
+      _doUnlock();
       if(playingClipId===clip.id){stopCurrent();return}
       idbGet(clip.id).then(blob=>{if(blob)playBlob(blob,clip.id)}).catch(()=>{});
     });    row.querySelector('[data-dl]').addEventListener('click',()=>downloadClip(clip));
@@ -1318,6 +1346,7 @@ function plStop(keepBinaural=true){
 }
 
 function plStart(fromIdx=0){
+  _doUnlock(); // must be inside gesture handler — called from button click
   playOrder=plBuildOrder();
   plCurrentIdx=fromIdx;
   plPlaying=true; plPaused=false;
@@ -1345,9 +1374,12 @@ function plPlayCurrent(){
 }
 
 function plPlayBlob(blob,clipId,rowIdx){
-  unlockAudio();
-  if(!audioCtx){plAdvance();return;}
+  if(!audioCtx||audioCtx.state!=='running'){plAdvance();return;}
   stopCurrent();
+  _plPlayBlobInner(blob,clipId,rowIdx);
+}
+
+function _plPlayBlobInner(blob,clipId,rowIdx){
 
   const run=(buf)=>{
     if(cadence!==1.0){
